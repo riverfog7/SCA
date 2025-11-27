@@ -25,9 +25,9 @@ if [ "$(uname)" == "Linux" ]; then
   fi
 fi
 
-if [ "${GH_TOKEN}" != "" ]; then
-  echo "Authenticating gh with provided GH_TOKEN..."
-  echo "${GH_TOKEN}" | gh auth login --with-token
+if [ "${GITHUB_TOKEN}" != "" ]; then
+  echo "Authenticating gh with provided GITHUB_TOKEN..."
+  echo "${GITHUB_TOKEN}" | gh auth login --with-token
   gh auth setup-git
 fi
 
