@@ -741,4 +741,5 @@ dataset/
 *.tar.*
 
 .hf_models/
+dataset
 
