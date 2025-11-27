@@ -29,6 +29,11 @@ if [ "${GITHUB_TOKEN}" != "" ]; then
   echo "Authenticating gh with provided GITHUB_TOKEN..."
   echo "${GITHUB_TOKEN}" | gh auth login --with-token
   gh auth setup-git
+  GH_USER=$(gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /user | jq -r .login)
+  GH_EMAIL=$(gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /user/emails | jq -r ".[0].email")
+  git config --global user.name "${GH_USER}"
+  git config --global user.email "${GH_EMAIL}"
+  echo "Git configured with user: ${GH_USER}, email: ${GH_EMAIL}"
 fi
 
 if ! command -v uv &> /dev/null; then
