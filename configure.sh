@@ -4,6 +4,7 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 MODEL_DIR="${SCRIPT_DIR}/.hf_models"
 MODEL_TAG="Qwen/Qwen3-Omni-30B-A3B-Instruct"
 MODEL_INSTALL_DIR="${MODEL_DIR}/${MODEL_TAG//\//_}"
+LOCAL_VENV_DIR="$HOME/uv_venv"
 
 if [ "$(uname)" != "Darwin" ] && [ "$(uname)" != "Linux" ]; then
     echo "Unsupported OS: $(uname). This script supports only Linux and macOS."
@@ -63,13 +64,20 @@ else
     echo "No NVIDIA GPU detected. Defaulting to CPU."
 fi
 
+if [ ! -d "$LOCAL_VENV_DIR" ]; then
+    echo "Creating local venv storage at $LOCAL_VENV_DIR"
+    mkdir -p "$LOCAL_VENV_DIR"
+else
+    echo "Local venv storage already exists at $LOCAL_VENV_DIR"
+fi
+
 rm -rf "${SCRIPT_DIR}/.venv"
 echo "Symlinking venv to local storage"
-ln -s ~/uv_venv "${SCRIPT_DIR}/.venv"
+ln -s "$LOCAL_VENV_DIR" "${SCRIPT_DIR}/.venv"
 
 echo "Running: uv sync $UV_EXTRA"
 cd "$SCRIPT_DIR" || exit 1
-uv sync "${UV_EXTRA}" --frozen --locked
+uv sync $UV_EXTRA --frozen --locked
 
 if [ ! -d "${MODEL_INSTALL_DIR}" ]; then
   echo "Downloading model to ${MODEL_INSTALL_DIR} ..."
