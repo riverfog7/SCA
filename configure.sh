@@ -5,12 +5,12 @@ MODEL_DIR="${SCRIPT_DIR}/.hf_models"
 MODEL_TAG="Qwen/Qwen3-Omni-30B-A3B-Instruct"
 MODEL_INSTALL_DIR="${MODEL_DIR}/${MODEL_TAG//\//_}"
 
-if [ $(uname) != "Darwin" ] && [ $(uname) != "Linux" ]; then
+if [ "$(uname)" != "Darwin" ] && [ "$(uname)" != "Linux" ]; then
     echo "Unsupported OS: $(uname). This script supports only Linux and macOS."
     exit 1
 fi
 
-if [ $(uname) == "Linux" ]; then
+if [ "$(uname)" == "Linux" ]; then
   if command -v apt $> /dev/null; then
     if ! command -v sudo &> /dev/null; then
         echo "Installing sudo..."
@@ -21,6 +21,7 @@ if [ $(uname) == "Linux" ]; then
         fi
     fi
     sudo apt update && sudo apt install -y gh btop nvtop screen
+  fi
 fi
 
 if [ "${GH_TOKEN}" != "" ]; then
@@ -68,7 +69,7 @@ ln -s ~/uv_venv "${SCRIPT_DIR}/.venv"
 
 echo "Running: uv sync $UV_EXTRA"
 cd "$SCRIPT_DIR" || exit 1
-uv sync $UV_EXTRA --frozen --locked
+uv sync "${UV_EXTRA}" --frozen --locked
 
 if [ ! -d "${MODEL_INSTALL_DIR}" ]; then
   echo "Downloading model to ${MODEL_INSTALL_DIR} ..."
