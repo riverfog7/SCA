@@ -21,7 +21,7 @@ if [ "$(uname)" == "Linux" ]; then
             exit 1
         fi
     fi
-    sudo apt update && sudo apt install -y gh btop nvtop screen git
+    sudo apt update && sudo apt install -y gh btop nvtop screen git jq
   fi
 fi
 
