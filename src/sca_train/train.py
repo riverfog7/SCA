@@ -14,7 +14,7 @@ from transformers import (
 from sca_data.dataset_utils import easy_load
 
 from .data_collator import Qwen3OmniCollator
-import logger
+from . import logger
 from .config import SCATrainingConfig
 from .utils import is_fsdp, prepare_model_for_kbit_training, get_local_rank
 from .config.loader import load_config
