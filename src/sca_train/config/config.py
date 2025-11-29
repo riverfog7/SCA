@@ -13,7 +13,7 @@ class SCATrainingConfig(BaseModel):
     dataset_cache_dir: Optional[Path] = Path("./hf_datasets").absolute()
     model_id: str = "Qwen/Qwen3-Omni-30B-A3B-Instruct"
     train_output_dir: Path = Path("./SCA_finetune")
-    verbose: SCATrainingVerbosityLevel = SCATrainingVerbosityLevel.NORMAL
+    verbose: SCATrainingVerbosityLevel = SCATrainingVerbosityLevel.INFO
     gradient_checkpointing: bool = True
     system_prompt: Optional[str] = None
     instruction_prompt: Optional[str] = None
