@@ -1,5 +1,5 @@
 hf_home: "./.hf_models"
-dataset_cache_dir: "./.hf_datasets"
+dataset_cache_dir: "./dataset"
 model_id: "Qwen/Qwen3-Omni-30B-A3B-Instruct"
 train_output_dir: "./SCA_finetune"
 verbose: 4
