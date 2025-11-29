@@ -28,6 +28,9 @@ def train(config: SCATrainingConfig):
     torch.cuda.set_device(local_rank)
     if is_fsdp():
         device_map = {"": local_rank}
+        if config.gradient_checkpointing:
+            config.gradient_checkpointing = False
+            logger.debug(config, "FSDP detected: Overriding config.gradient_checkpointing to False (Managed by FSDP Config)")
     else:
         device_map = {"": local_rank}
     logger.debug(config, f"Using device map: {device_map} at local rank {local_rank}", rank0_only=False)
