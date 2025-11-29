@@ -84,6 +84,12 @@ echo "Running: uv sync $UV_EXTRA"
 cd "$SCRIPT_DIR" || exit 1
 uv sync $UV_EXTRA --frozen --dev
 
+if [ "${WANDB_API_KEY}" != "" ]; then
+  echo "Configuring Weights & Biases with provided WANDB_API_KEY..."
+  uv run wandb login "${WANDB_API_KEY}"
+  echo "export WANDB_PROJECT=SCA" >> ~/.bashrc
+fi
+
 if [ ! -d "${MODEL_INSTALL_DIR}" ]; then
   echo "Downloading model to ${MODEL_INSTALL_DIR} ..."
   mkdir -p "${MODEL_INSTALL_DIR}"
