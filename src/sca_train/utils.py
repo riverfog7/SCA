@@ -3,6 +3,11 @@ import os
 
 def prepare_model_for_kbit_training(model, use_gradient_checkpointing: bool = True, gradient_checkpointing_kwargs = None):
     if use_gradient_checkpointing:
+        if gradient_checkpointing_kwargs is None:
+            gradient_checkpointing_kwargs = {"use_reentrant": False}
+        elif "use_reentrant" not in gradient_checkpointing_kwargs:
+            gradient_checkpointing_kwargs["use_reentrant"] = False
+
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs)
 
     # Automatic fallback for other models
