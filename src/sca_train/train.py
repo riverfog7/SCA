@@ -28,6 +28,7 @@ def train(config: SCATrainingConfig):
 
     logger.debug(config, f"Detected FSDP mode as: {is_fsdp()} at local rank {local_rank}", rank0_only=False)
     torch.cuda.set_device(local_rank)
+    grad_ckpt = config.gradient_checkpointing
     if is_fsdp():
         device_map = None
         if config.gradient_checkpointing:
@@ -115,11 +116,12 @@ def train(config: SCATrainingConfig):
         model.code2wav.requires_grad_(False)
         logger.debug(config, f"frozen code2wav")
 
-    logger.debug(config, f"Preparing model for k-bit training")
+    logger.debug(config, f"Preparing model for k-bit training, with grad_ckpt={grad_ckpt}")
+    model.config.use_cache = False
     prepare_model_for_kbit_training(
         model=model,
-        use_gradient_checkpointing=config.gradient_checkpointing,
-        gradient_checkpointing_kwargs=None,
+        use_gradient_checkpointing=grad_ckpt,
+        gradient_checkpointing_kwargs={"use_reentrant": False} if grad_ckpt else None,
     )
 
     peft_config = LoraConfig(
