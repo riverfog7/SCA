@@ -117,7 +117,9 @@ def train(config: SCATrainingConfig):
         logger.debug(config, f"frozen code2wav")
 
     logger.debug(config, f"Preparing model for k-bit training, with grad_ckpt={grad_ckpt}")
-    model.config.use_cache = False
+    model.config.thinker_config.text_config.use_cache = False
+    model.config.talker_config.text_config.use_cache = False
+    model.config.talker_config.code_predictor_config.use_cache = False
     prepare_model_for_kbit_training(
         model=model,
         use_gradient_checkpointing=grad_ckpt,
