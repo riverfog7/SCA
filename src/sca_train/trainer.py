@@ -18,17 +18,9 @@ class QwenTrainer(Trainer):
         else:
             labels = None
 
-        inputs_for_model = {
-            "input_ids": inputs["input_ids"],
-            "attention_mask": inputs["attention_mask"],
-        }
-
-        if "input_features" in inputs:
-            logger.debug(self.config, f"Adding input_features to model inputs.")
-            inputs_for_model["input_features"] = inputs["input_features"]
-        if "pixel_values" in inputs:
-            logger.debug(self.config, f"Adding pixel_values to model inputs.")
-            inputs_for_model["pixel_values"] = inputs["pixel_values"]
+        inputs_for_model = inputs.copy()
+        if "num_items_in_batch" in inputs_for_model:
+            del inputs_for_model["num_items_in_batch"]
 
         logger.debug(self.config, f"Forward pass with inputs keys: {list(inputs_for_model.keys())}")
         outputs = model(**inputs_for_model)
