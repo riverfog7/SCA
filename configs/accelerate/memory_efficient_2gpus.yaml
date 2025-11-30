@@ -11,10 +11,13 @@ fsdp_config:
   fsdp_reshard_after_forward: true
   fsdp_state_dict_type: SHARDED_STATE_DICT
   fsdp_transformer_layer_cls_to_wrap: Qwen3OmniMoeThinkerTextDecoderLayer
-  fsdp_version: 2
+  fsdp_version: 1
   # for FSDP
   fsdp_use_orig_params: true
   fsdp_sharding_strategy: FULL_SHARD
+  fsdp_backward_prefetch: BACKWARD_PRE
+  fsdp_forward_prefetch: false
+  fsdp_sync_module_states: true
 machine_rank: 0
 main_training_function: main
 mixed_precision: bf16
