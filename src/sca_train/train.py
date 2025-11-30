@@ -155,6 +155,7 @@ def train(config: SCATrainingConfig):
     logger.debug(config, f"TrainingArguments: {args}")
 
     trainer = QwenTrainer(
+        config=config,
         model=model,
         args=args,
         train_dataset=train_dataset,
