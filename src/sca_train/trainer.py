@@ -49,3 +49,7 @@ class QwenTrainer(Trainer):
 
         logger.debug(self.config, f"[Rank {local_rank}] Computed loss: {loss.item()}", rank0_only=False)
         return (loss, outputs) if return_outputs else loss
+
+    def _save_optimizer_and_scheduler(self, output_dir):
+        logger.debug(self.config, "Skipping optimizer save.")
+        return
