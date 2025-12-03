@@ -1,6 +1,6 @@
 hf_home: "./.hf_models"
 dataset_cache_dir: "./dataset"
-model_id: "Qwen/Qwen3-Omni-30B-A3B-Instruct"
+model_id: "huihui-ai/Huihui-Qwen3-Omni-30B-A3B-Instruct-abliterated"
 train_output_dir: "./SCA_finetune"
 verbose: 4
 
@@ -19,8 +19,8 @@ lora_config:
   task_type: "CAUSAL_LM"
 
 training_args:
-  per_device_train_batch_size: 1
-  gradient_accumulation_steps: 16
+  per_device_train_batch_size: 6
+  gradient_accumulation_steps: 2
   warmup_ratio: 0.03
   num_train_epochs: 3
   max_steps: -1

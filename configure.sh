@@ -2,7 +2,7 @@
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 MODEL_DIR="${SCRIPT_DIR}/.hf_models"
-MODEL_TAG="Qwen/Qwen3-Omni-30B-A3B-Instruct"
+MODEL_TAG="huihui-ai/Huihui-Qwen3-Omni-30B-A3B-Instruct-abliterated"
 MODEL_INSTALL_DIR="${MODEL_DIR}/${MODEL_TAG//\//_}"
 LOCAL_VENV_DIR="$HOME/uv_venv"
 
