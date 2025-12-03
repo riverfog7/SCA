@@ -35,6 +35,6 @@ training_args:
   report_to:
     - "wandb"
   save_only_model: false  # overrided in custom trainer. DO NOT CHANGE TO TRUE
-  data_loader_pin_memory: true
+  data_loader_pin_memory: false
   dataloader_num_workers: 4
   dataloader_prefetch_factor: 2

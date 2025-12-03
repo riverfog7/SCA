@@ -6,6 +6,9 @@ SCA_CONFIG="${SCRIPT_DIR}/../configs/sca/default.yaml"
 export NCCL_P2P_DISABLE=1
 export NCCL_IB_DISABLE=1
 
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+
 cd "${SCRIPT_DIR}/.." || exit 1
 uv run accelerate launch \
   --config_file "${ACCELERATE_CONFIG}" \
