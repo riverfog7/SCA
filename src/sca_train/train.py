@@ -176,6 +176,7 @@ def train(config: SCATrainingConfig):
         dataloader_pin_memory=training_args.dataloader_pin_memory,
         dataloader_num_workers=training_args.dataloader_num_workers,
         dataloader_prefetch_factor=training_args.dataloader_prefetch_factor,
+        dataloader_persistent_workers=True,
     )
     logger.debug(config, f"TrainingArguments: {args}")
 
