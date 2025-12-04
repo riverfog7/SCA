@@ -19,8 +19,8 @@ lora_config:
   task_type: "CAUSAL_LM"
 
 training_args:
-  per_device_train_batch_size: 6
-  gradient_accumulation_steps: 2
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 4
   warmup_ratio: 0.03
   num_train_epochs: 3
   max_steps: -1
