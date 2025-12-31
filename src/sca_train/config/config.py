@@ -20,5 +20,6 @@ class SCATrainingConfig(BaseModel):
     max_length: int = 16384
     mask_instruction: bool = True
     attn_impl: str = "flash_attention_2"
+    train_mtp: bool = True
     lora_config: SCALoraConfig = SCALoraConfig()
     training_args: SCATrainingArguments = SCATrainingArguments()

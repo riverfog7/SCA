@@ -45,6 +45,8 @@ class Qwen3OmniCollator:
                             if "audio_waveform" in content:
                                 if feature_audio is not None:
                                     raise ValueError("Multiple user audio contents found in a single input.")
+                                if content["sampling_rate"] != 16000:
+                                    raise ValueError("User audio sampling rate must be 16000 Hz.")
                                 feature_audio = content.pop("audio_waveform")
                                 content["audio_url"] = "place_holder"
 
@@ -61,6 +63,8 @@ class Qwen3OmniCollator:
                             if "audio_waveform" in content:
                                 if assistant_audio is not None:
                                     raise ValueError("Multiple assistant audio contents found in a single input.")
+                                if content["sampling_rate"] != 24000:
+                                    raise ValueError("Assistant audio sampling rate must be 24000 Hz.")
                                 assistant_audio = content.pop("audio_waveform")
                                 assistant_audios.append(assistant_audio)
                                 remove_idx.append(i)

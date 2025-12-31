@@ -6,17 +6,26 @@ verbose: 4
 
 gradient_checkpointing: false # Turn off when using FSDP
 attn_impl: "flash_attention_2"
+train_mtp: true
 max_length: 65536
 mask_instruction: true
 
 lora_config:
   use_qlora: true
-  r: 64
-  lora_alpha: 128
-  target_modules_regex: "^thinker\\.model\\.layers\\.\\d+\\..*(q|k|v|o)_proj$"
-  lora_dropout: 0.05
-  lora_bias: "none"
-  task_type: "CAUSAL_LM"
+  thinker:
+    r: 64
+    lora_alpha: 128
+    target_modules_regex: "^thinker\\.model\\.layers\\.\\d+\\..*(q|k|v|o)_proj$"
+    lora_dropout: 0.05
+    lora_bias: "none"
+    task_type: "CAUSAL_LM"
+  talker:
+    r: 64
+    lora_alpha: 128
+    target_modules_regex: "^talker\\.model\\.layers\\.\\d+\\..*(q|k|v|o)_proj$"
+    lora_dropout: 0.05
+    lora_bias: "none"
+    task_type: "CAUSAL_LM"
 
 training_args:
   per_device_train_batch_size: 2
@@ -35,6 +44,6 @@ training_args:
   report_to:
     - "wandb"
   save_only_model: false  # overrided in custom trainer. DO NOT CHANGE TO TRUE
-  data_loader_pin_memory: false
+  dataloader_pin_memory: false
   dataloader_num_workers: 4
   dataloader_prefetch_factor: 2

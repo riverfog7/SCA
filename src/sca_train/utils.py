@@ -10,19 +10,19 @@ def prepare_model_for_kbit_training(model, use_gradient_checkpointing: bool = Tr
 
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs)
 
-    # Automatic fallback for other models
-    if hasattr(model, "thinker"):
-        # Qwen3 Omni will use this
-        embed_tokens = model.thinker.model.embed_tokens
-    elif hasattr(model, "model") and hasattr(model.model, "embed_tokens"):
-        embed_tokens = model.model.embed_tokens
-    else:
-        raise AttributeError("Could not locate embed_tokens in model structure.")
-
     def make_inputs_require_grad(module, input, output):
         output.requires_grad_(True)
 
-    embed_tokens.register_forward_hook(make_inputs_require_grad)
+    if hasattr(model, "thinker") and hasattr(model, "talker"):
+        thinker_embeds = model.thinker.model.embed_tokens
+        talker_embeds = model.talker.model.embed_tokens
+        thinker_embeds.register_forward_hook(make_inputs_require_grad)
+        talker_embeds.register_forward_hook(make_inputs_require_grad)
+    elif hasattr(model, "model") and hasattr(model.model, "embed_tokens"):
+        embed_tokens = model.model.embed_tokens
+        embed_tokens.register_forward_hook(make_inputs_require_grad)
+    else:
+        raise AttributeError("Could not locate embed_tokens in model structure.")
 
 
 def is_fsdp() -> bool:

@@ -6,9 +6,7 @@ import gc
 import torch
 from peft import LoraConfig, get_peft_model
 from transformers import (
-    Qwen3OmniMoeForConditionalGeneration,
     Qwen3OmniMoeProcessor,
-    Qwen3OmniMoeConfig,
     TrainingArguments,
     BitsAndBytesConfig,
 )
@@ -21,6 +19,7 @@ from .config import SCATrainingConfig
 from .trainer import QwenTrainer
 from .utils import is_fsdp, prepare_model_for_kbit_training, get_local_rank
 from .config.loader import load_config
+from .modeling import Qwen3OmniMoeWithProperForward, Qwen3OmniMoeWithProperForwardConfig
 
 
 def train(config: SCATrainingConfig):
@@ -59,6 +58,7 @@ def train(config: SCATrainingConfig):
         processor=processor,
         max_length=config.max_length,
         mask_instruction=config.mask_instruction,
+        train_talker=True,
     )
 
     logger.debug(config, f"Start loading model at local rank {local_rank}", rank0_only=False)
@@ -72,18 +72,20 @@ def train(config: SCATrainingConfig):
             bnb_4bit_quant_type="nf4",
             bnb_4bit_compute_dtype=torch.bfloat16,
             bnb_4bit_quant_storage=torch.bfloat16,
+            llm_int8_skip_modules=["code_predictor", "mimi_model", "mimi_feature_extractor", "code2wav"],
         )
         logger.debug(config, f"BitsAndBytesConfig: {bnb_config}")
 
-    model_config = Qwen3OmniMoeConfig.from_pretrained(
+    model_config = Qwen3OmniMoeWithProperForwardConfig.from_pretrained(
         config.model_id,
         trust_remote_code=True,
         cache_dir=config.hf_home if config.hf_home else None,
     )
     model_config.torch_dtype = torch.bfloat16
+    model_config.train_mtp = config.train_mtp
     logger.debug(config, f"Model Config: {model_config}")
 
-    model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
+    model = Qwen3OmniMoeWithProperForward.from_pretrained(
         config.model_id,
         config=model_config,
         quantization_config=bnb_config,
@@ -94,14 +96,6 @@ def train(config: SCATrainingConfig):
     )
     logger.debug(config, f"Finished loading model at local rank {local_rank}", rank0_only=False)
 
-    if hasattr(model, "thinker"):
-        model.model = model.thinker
-        logger.debug(config, "Patched model.model for FSDP/Qwen compatibility.")
-
-        if hasattr(model.thinker, "forward"):
-            model.forward = model.thinker.forward
-            logger.debug(config, "Patched model.forward for FSDP/Qwen compatibility.")
-
     logger.debug(config, "Forcing model to bfloat16 to satisfy FSDP uniformity...")
     for param in model.parameters():
         if param.is_floating_point():
@@ -111,19 +105,22 @@ def train(config: SCATrainingConfig):
         if buffer.is_floating_point():
             buffer.data = buffer.data.to(torch.bfloat16)
 
-    logger.debug(config, f"Freezing layers")
-    if hasattr(model, "thinker") and hasattr(model.thinker, "audio_tower"):
-        model.thinker.audio_tower.requires_grad_(False)
-        logger.debug(config, f"frozen thinker.audio_tower")
-    elif hasattr(model, "audio_tower"):
-        model.audio_tower.requires_grad_(False)
-        logger.debug(config, f"frozen audio_tower")
-    if hasattr(model, "talker"):
-        model.talker.requires_grad_(False)
-        logger.debug(config, f"frozen talker")
+    model.requires_grad_(False)
+    
+    if hasattr(model, "talker") and hasattr(model.talker, "code_predictor"):
+        model.talker.code_predictor.requires_grad_(True)
+        logger.debug(config, f"Unfrozen talker.code_predictor (MTP)")
+    
+    if hasattr(model, "mimi_model"):
+        model.mimi_model.requires_grad_(False)
     if hasattr(model, "code2wav"):
         model.code2wav.requires_grad_(False)
-        logger.debug(config, f"frozen code2wav")
+    if hasattr(model, "thinker"):
+        if hasattr(model.thinker, "audio_tower"):
+            model.thinker.audio_tower.requires_grad_(False)
+        if hasattr(model.thinker, "visual"):
+            model.thinker.visual.requires_grad_(False)
+
 
     logger.debug(config, f"Preparing model for k-bit training, with grad_ckpt={grad_ckpt}")
     model.config.thinker_config.text_config.use_cache = False
@@ -135,18 +132,30 @@ def train(config: SCATrainingConfig):
         gradient_checkpointing_kwargs={"use_reentrant": False} if grad_ckpt else None,
     )
 
-    peft_config = LoraConfig(
-        r=lora_config.r,
-        lora_alpha=lora_config.lora_alpha,
-        target_modules=lora_config.target_modules_regex,
-        lora_dropout=lora_config.lora_dropout,
-        bias=lora_config.lora_bias,
-        task_type=lora_config.task_type,
+    thinker_cfg = lora_config.thinker
+    talker_cfg = lora_config.talker
+    
+    thinker_peft_config = LoraConfig(
+        r=thinker_cfg.r,
+        lora_alpha=thinker_cfg.lora_alpha,
+        target_modules=thinker_cfg.target_modules_regex,
+        lora_dropout=thinker_cfg.lora_dropout,
+        bias=thinker_cfg.lora_bias,
+        task_type=thinker_cfg.task_type,
+        modules_to_save=["talker.code_predictor"],
     )
-    logger.debug(config, f"PEFT LoraConfig: {peft_config}")
-
-    logger.debug(config, f"Wrapping model with PEFT LoRA")
-    model = get_peft_model(model, peft_config)
+    model = get_peft_model(model, thinker_peft_config, adapter_name="thinker")
+    
+    talker_peft_config = LoraConfig(
+        r=talker_cfg.r,
+        lora_alpha=talker_cfg.lora_alpha,
+        target_modules=talker_cfg.target_modules_regex,
+        lora_dropout=talker_cfg.lora_dropout,
+        bias=talker_cfg.lora_bias,
+        task_type=talker_cfg.task_type,
+    )
+    model.add_adapter("talker", talker_peft_config)
+    model.set_adapter(["thinker", "talker"])
     if get_local_rank() == 0 and config.verbose >= config.verbose.INFO:
         model.print_trainable_parameters()
 
