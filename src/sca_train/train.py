@@ -39,7 +39,7 @@ def train(config: SCATrainingConfig):
 
     logger.debug(config, f"Start loading dataset at local rank {local_rank}", rank0_only=False)
     train_dataset = easy_load(
-        format="chat",
+        format="talker_chat",
         cache_dir=config.dataset_cache_dir,
         system_prompt=config.system_prompt,
         instruction_prompt=config.instruction_prompt,
