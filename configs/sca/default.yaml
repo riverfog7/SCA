@@ -28,9 +28,9 @@ lora_config:
     task_type: "CAUSAL_LM"
 
 training_args:
-  per_device_train_batch_size: 2
-  gradient_accumulation_steps: 4
-  warmup_ratio: 0.03
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 16
+  warmup_ratio: 0.05
   num_train_epochs: 3
   max_steps: -1
   learning_rate: 0.0001
@@ -44,6 +44,6 @@ training_args:
   report_to:
     - "wandb"
   save_only_model: false  # overrided in custom trainer. DO NOT CHANGE TO TRUE
-  dataloader_pin_memory: false
+  dataloader_pin_memory: true
   dataloader_num_workers: 4
   dataloader_prefetch_factor: 2
