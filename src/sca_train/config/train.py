@@ -10,6 +10,7 @@ class SCATrainingArguments(BaseModel):
     num_train_epochs: int = 3
     max_steps: int = -1
     learning_rate: float = 2e-4
+    max_grad_norm: float = 1.0
     fp16: bool = False
     bf16: bool = True
     logging_steps: int = 10

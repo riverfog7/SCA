@@ -214,6 +214,7 @@ def train(config: SCATrainingConfig):
         num_train_epochs=training_args.num_train_epochs,
         max_steps=training_args.max_steps,
         learning_rate=training_args.learning_rate,
+        max_grad_norm=training_args.max_grad_norm,
         fp16=training_args.fp16,
         bf16=training_args.bf16,
         logging_steps=training_args.logging_steps,
