@@ -83,6 +83,11 @@ def train(config: SCATrainingConfig):
     )
     model_config.torch_dtype = torch.bfloat16
     model_config.train_mtp = config.train_mtp
+    
+    if hasattr(model_config, "talker_config") and hasattr(model_config.talker_config, "text_config"):
+        if not hasattr(model_config.talker_config, "vocab_size"):
+            model_config.talker_config.vocab_size = model_config.talker_config.text_config.vocab_size
+    
     logger.debug(config, f"Model Config: {model_config}")
 
     model = Qwen3OmniMoeWithProperForward.from_pretrained(
