@@ -35,6 +35,28 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
         for param in self.mimi_model.parameters():
             param.requires_grad = False
 
+    def _get_unwrapped_code_predictor(self):
+        """Get the code_predictor unwrapped from PEFT's ModulesToSaveWrapper if present.
+        
+        PEFT wraps modules in `modules_to_save` with ModulesToSaveWrapper, which has a 
+        forward(x, *args, **kwargs) signature that requires positional arg `x`. This method
+        returns the underlying module so we can call it with keyword arguments.
+        """
+        code_predictor = self.talker.code_predictor
+        
+        if hasattr(code_predictor, "modules_to_save"):
+            # Get the first active adapter's module
+            active_adapters = getattr(code_predictor, "active_adapters", ["thinker"])
+            if active_adapters and active_adapters[0] in code_predictor.modules_to_save:
+                code_predictor = code_predictor.modules_to_save[active_adapters[0]]
+            elif "thinker" in code_predictor.modules_to_save:
+                code_predictor = code_predictor.modules_to_save["thinker"]
+            else:
+                # Fallback to original module
+                code_predictor = code_predictor.original_module
+        
+        return code_predictor
+
     def _encode_audio_to_codes(self, audios: List[np.ndarray]) -> torch.Tensor:
         """
         Encode assistant audio to Mimi codes.
@@ -364,7 +386,9 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
 
             # get embeddings
             layer0_embeddings = self.talker.get_input_embeddings()(layer0_codes.to(self.device))
-            predictor_embeds = self.talker.code_predictor.get_input_embeddings()
+            # Use helper to unwrap from PEFT wrapper if present
+            unwrapped_code_predictor = self._get_unwrapped_code_predictor()
+            predictor_embeds = unwrapped_code_predictor.get_input_embeddings()
             
             # Assert embeddings shape
             assert layer0_embeddings.ndim == 3, f"layer0_embeddings should be 3D, got {layer0_embeddings.shape}"
@@ -559,7 +583,8 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
                     f"codec_hidden shape mismatch: {codec_hidden.shape}"
                 
                 mtp_total_loss: torch.Tensor = torch.tensor(0.0, device=self.device)
-                code_predictor = self.talker.code_predictor
+                code_predictor = self._get_unwrapped_code_predictor()
+                
                 hidden_dim = codec_hidden.shape[2]
                 
                 # Get layer 0 embeddings (already have layer0_embeddings from above)
