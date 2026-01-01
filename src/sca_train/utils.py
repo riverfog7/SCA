@@ -14,15 +14,16 @@ def prepare_model_for_kbit_training(model, use_gradient_checkpointing: bool = Tr
         output.requires_grad_(True)
 
     if hasattr(model, "thinker") and hasattr(model, "talker"):
-        thinker_embeds = model.thinker.model.embed_tokens
-        talker_embeds = model.talker.model.embed_tokens
+        # Use get_input_embeddings() method instead of direct embed_tokens access
+        thinker_embeds = model.thinker.get_input_embeddings()
+        talker_embeds = model.talker.get_input_embeddings()
         thinker_embeds.register_forward_hook(make_inputs_require_grad)
         talker_embeds.register_forward_hook(make_inputs_require_grad)
-    elif hasattr(model, "model") and hasattr(model.model, "embed_tokens"):
-        embed_tokens = model.model.embed_tokens
+    elif hasattr(model, "get_input_embeddings"):
+        embed_tokens = model.get_input_embeddings()
         embed_tokens.register_forward_hook(make_inputs_require_grad)
     else:
-        raise AttributeError("Could not locate embed_tokens in model structure.")
+        raise AttributeError("Could not locate input embeddings in model structure.")
 
 
 def is_fsdp() -> bool:
