@@ -23,6 +23,7 @@ class Qwen3OmniMoeWithProperForwardConfig(Qwen3OmniMoeConfig):
 
 class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
     config_class = Qwen3OmniMoeWithProperForwardConfig
+    _keys_to_ignore_on_load_missing = [r"speaker_projection\..*"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
