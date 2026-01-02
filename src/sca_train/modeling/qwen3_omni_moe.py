@@ -1,3 +1,4 @@
+import re
 from typing import List
 
 import numpy as np
@@ -42,6 +43,14 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
         speaker_embed_dim = 192  # ECAPA-TDNN output dimension
         talker_hidden_size = self.config.talker_config.text_config.hidden_size
         self.speaker_projection = nn.Linear(speaker_embed_dim, talker_hidden_size)
+
+    def _initialize_missing_keys(self, missing_keys: List[str], is_quantized: bool) -> None:
+        ignore_patterns = self._keys_to_ignore_on_load_missing or []
+        if ignore_patterns:
+            ignore_regex = re.compile("|".join(rf"({p})" for p in ignore_patterns))
+            missing_keys = [k for k in missing_keys if ignore_regex.search(k) is None]
+        
+        super()._initialize_missing_keys(missing_keys, is_quantized)
 
     def _get_unwrapped_code_predictor(self):
         """Get the code_predictor unwrapped from PEFT's ModulesToSaveWrapper if present.
