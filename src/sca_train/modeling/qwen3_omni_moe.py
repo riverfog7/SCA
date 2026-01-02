@@ -112,10 +112,15 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
             self.config.talker_config.codec_bos_id,
         ]], device=self.talker.device, dtype=torch.long)
         
-        codec_embeds = self.talker.get_input_embeddings()(codec_special_tokens).to(self.talker.device)
+        codec_embeds_raw = self.talker.get_input_embeddings()(codec_special_tokens).to(self.talker.device)
         
         # Replace position 3 (speaker slot) with projected speaker embedding
-        codec_embeds[:, 3, :] = projected_speaker.to(codec_embeds.dtype)
+        # Use torch.cat instead of in-place assignment to avoid autograd issues
+        codec_embeds = torch.cat([
+            codec_embeds_raw[:, :3, :],  # positions 0, 1, 2
+            projected_speaker.to(codec_embeds_raw.dtype).unsqueeze(1),  # position 3 (speaker)
+            codec_embeds_raw[:, 4:, :],  # positions 4, 5
+        ], dim=1)
         
         assistant_codec_hidden = torch.cat((
             torch.zeros(
