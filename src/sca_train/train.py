@@ -72,7 +72,7 @@ def train(config: SCATrainingConfig):
             bnb_4bit_quant_type="nf4",
             bnb_4bit_compute_dtype=torch.bfloat16,
             bnb_4bit_quant_storage=torch.bfloat16,
-            llm_int8_skip_modules=["code_predictor", "mimi_model", "mimi_feature_extractor", "code2wav"],
+            llm_int8_skip_modules=["code_predictor", "mimi_model", "mimi_feature_extractor", "code2wav", "speaker_projection"],
         )
         logger.debug(config, f"BitsAndBytesConfig: {bnb_config}")
 

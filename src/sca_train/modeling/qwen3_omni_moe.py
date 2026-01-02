@@ -24,7 +24,6 @@ class Qwen3OmniMoeWithProperForwardConfig(Qwen3OmniMoeConfig):
 
 class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
     config_class = Qwen3OmniMoeWithProperForwardConfig
-    _keys_to_ignore_on_load_missing = [r"speaker_projection\..*", "mimi_model\..*"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -40,25 +39,10 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
 
         # Projection layer: speaker embedding (192 dim from ECAPA-TDNN) -> talker hidden size
         # Speaker embeddings are pre-computed in the dataset, not extracted here
+        # This layer is kept in fp16/bf16 (not quantized) via llm_int8_skip_modules in train.py
         speaker_embed_dim = 192  # ECAPA-TDNN output dimension
         talker_hidden_size = self.config.talker_config.text_config.hidden_size
         self.speaker_projection = nn.Linear(speaker_embed_dim, talker_hidden_size)
-
-    def _initialize_missing_keys(self, missing_keys: List[str], is_quantized: bool) -> None:
-        ignore_patterns = self._keys_to_ignore_on_load_missing or []
-        ignore_regex = None
-        if ignore_patterns:
-            ignore_regex = re.compile("|".join(rf"({p})" for p in ignore_patterns))
-        
-        for key in self.state_dict():
-            if ignore_regex and ignore_regex.search(key) is not None:
-                continue
-            
-            if key in missing_keys:
-                continue
-                
-            param_or_buffer = self.get_parameter_or_buffer(key)
-            param_or_buffer._is_hf_initialized = True
 
     def _get_unwrapped_code_predictor(self):
         """Get the code_predictor unwrapped from PEFT's ModulesToSaveWrapper if present.
