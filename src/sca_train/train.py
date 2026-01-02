@@ -116,6 +116,10 @@ def train(config: SCATrainingConfig):
         model.talker.code_predictor.requires_grad_(True)
         logger.debug(config, f"Unfrozen talker.code_predictor (MTP)")
     
+    if hasattr(model, "speaker_projection"):
+        model.speaker_projection.requires_grad_(True)
+        logger.debug(config, f"Unfrozen speaker_projection for voice cloning")
+    
     if hasattr(model, "mimi_model"):
         model.mimi_model.requires_grad_(False)
     if hasattr(model, "code2wav"):
