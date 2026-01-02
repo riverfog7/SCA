@@ -3462,7 +3462,7 @@ wheels = [
 [[package]]
 name = "sca-data"
 version = "0.1.0"
-source = { git = "https://github.com/riverfog7/sca_data_prep.git#4df12665fa644cf0464ebe6a78baaeede49e6f54" }
+source = { git = "https://github.com/riverfog7/sca_data_prep.git#1ffaf67c8b40f090839504ecca8f962de5349e1d" }
 dependencies = [
     { name = "datasets" },
     { name = "numpy" },
