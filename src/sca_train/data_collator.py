@@ -81,8 +81,10 @@ class Qwen3OmniCollator:
                                     raise ValueError("Multiple speaker embeddings found in a single input.")
                                 speaker_embedding = content.pop("speaker_embedding")
                                 
-                                # Validate speaker embedding dimensions
-                                if isinstance(speaker_embedding, np.ndarray):
+                                # Convert to tensor (handles list, numpy array, or tensor)
+                                if isinstance(speaker_embedding, list):
+                                    speaker_embedding = torch.tensor(speaker_embedding, dtype=torch.float32)
+                                elif isinstance(speaker_embedding, np.ndarray):
                                     speaker_embedding = torch.from_numpy(speaker_embedding)
                                 
                                 if speaker_embedding.ndim == 1:
