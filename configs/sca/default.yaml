@@ -40,7 +40,7 @@ training_args:
   fp16: false
   bf16: true
   logging_steps: 1
-  save_steps: 50
+  save_steps: 100
   optim: "adamw_torch"
   remove_unused_columns: false
   ddp_find_unused_parameters: false
