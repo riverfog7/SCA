@@ -4,7 +4,7 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 import gc
 import torch
-from peft import LoraConfig, get_peft_model, inject_adapter_in_model
+from peft import LoraConfig, get_peft_model
 from transformers import (
     Qwen3OmniMoeProcessor,
     TrainingArguments,
@@ -141,9 +141,7 @@ def train(config: SCATrainingConfig):
         gradient_checkpointing_kwargs={"use_reentrant": False} if grad_ckpt else None,
     )
 
-    thinker_cfg = lora_config.thinker
-    talker_cfg = lora_config.talker
-    
+
     # Debug: Log module names before PEFT wrapping (rank 0 only)
     if get_local_rank() == 0:
         logger.debug(config, "Sample module names BEFORE PEFT wrapping:")
@@ -156,97 +154,55 @@ def train(config: SCATrainingConfig):
         for name in sample_modules:
             logger.debug(config, f"  {name}")
     
-    thinker_peft_config = LoraConfig(
-        r=thinker_cfg.r,
-        use_dora=thinker_cfg.use_dora,
-        lora_alpha=thinker_cfg.lora_alpha,
-        target_modules=thinker_cfg.target_modules_regex,
-        lora_dropout=thinker_cfg.lora_dropout,
-        bias=thinker_cfg.lora_bias,
-        task_type=thinker_cfg.task_type,
+    peft_config = LoraConfig(
+        r=lora_config.r,
+        use_dora=lora_config.use_dora,
+        lora_alpha=lora_config.lora_alpha,
+        target_modules=lora_config.target_modules_regex,
+        lora_dropout=lora_config.lora_dropout,
+        bias=lora_config.lora_bias,
+        task_type=lora_config.task_type,
+        modules_to_save=lora_config.modules_to_save,
     )
     
-    logger.debug(config, f"Applying thinker LoRA with adapter_name='thinker'...")
-    logger.debug(config, f"  Thinker target_modules regex: {thinker_cfg.target_modules_regex}")
-    model = get_peft_model(model, thinker_peft_config, adapter_name="thinker")
+    logger.debug(config, f"Applying unified LoRA for thinker and talker...")
+    logger.debug(config, f"  Target_modules regex: {lora_config.target_modules_regex}")
+    logger.debug(config, f"  modules_to_save: {lora_config.modules_to_save}")
+    model = get_peft_model(model, peft_config)
     
-    # Debug: Log module names after thinker PEFT wrapping
+    logger.debug(config, f"Model type after PEFT: {type(model).__name__}")
+    
+    # Verify LoRA was created (fail-fast if something went wrong)
     if get_local_rank() == 0:
-        logger.debug(config, "Sample module names AFTER thinker PEFT wrapping:")
-        sample_modules = []
-        for name, _ in model.named_modules():
-            if "talker" in name and "self_attn" in name and "proj" in name and "lora" not in name:
-                sample_modules.append(name)
-                if len(sample_modules) >= 2:
-                    break
-        for name in sample_modules:
-            logger.debug(config, f"  {name}")
-    
-    talker_peft_config = LoraConfig(
-        r=talker_cfg.r,
-        use_dora=talker_cfg.use_dora,
-        lora_alpha=talker_cfg.lora_alpha,
-        target_modules=talker_cfg.target_modules_regex,
-        lora_dropout=talker_cfg.lora_dropout,
-        bias=talker_cfg.lora_bias,
-        task_type=talker_cfg.task_type,
-        modules_to_save=["talker.code_predictor", "speaker_projection"],
-    )
-    
-    logger.debug(config, f"Injecting talker LoRA with adapter_name='talker'...")
-    logger.debug(config, f"  Talker target_modules regex: {talker_cfg.target_modules_regex}")
-    inject_adapter_in_model(talker_peft_config, model, adapter_name="talker")
-    
-    logger.debug(config, "Setting requires_grad=True for both thinker and talker adapters...")
-    model.set_requires_grad(["thinker", "talker"], requires_grad=True)
-    
-    # Verify both adapters were created (fail-fast if something went wrong)
-    if get_local_rank() == 0:
-        thinker_lora_count = sum(1 for n, p in model.named_parameters()
-                                if p.requires_grad and "lora_" in n and "thinker" in n)
-        talker_lora_count = sum(1 for n, p in model.named_parameters() 
-                                if p.requires_grad and "lora_" in n and "talker" in n)
+        lora_count = sum(1 for n, p in model.named_parameters()
+                        if p.requires_grad and "lora_" in n)
         other_trainable_count = sum(1 for n, p in model.named_parameters()
                                    if p.requires_grad and "lora_" not in n)
         
-        logger.debug(config, f"Verification: Thinker LoRA parameters: {thinker_lora_count}")
-        logger.debug(config, f"Verification: Talker LoRA parameters: {talker_lora_count}")
-        logger.debug(config, f"Verification: Other trainable parameters: {other_trainable_count}")
+        logger.debug(config, f"Verification: LoRA parameters: {lora_count}")
+        logger.debug(config, f"Verification: Other trainable parameters (modules_to_save): {other_trainable_count}")
         
-        if thinker_lora_count == 0:
-            raise RuntimeError("CRITICAL: Thinker LoRA was not created! Check get_peft_model call and regex.")
-        if talker_lora_count == 0:
-            raise RuntimeError("CRITICAL: Talker LoRA was not created! Check inject_adapter_in_model call and regex.")
-    
-    logger.debug(config, f"Model type after PEFT injection: {type(model).__name__}")
+        if lora_count == 0:
+            raise RuntimeError("CRITICAL: LoRA was not created! Check get_peft_model call and regex.")
     
     if get_local_rank() == 0:
-        thinker_params = []
-        talker_params = []
+        lora_params = []
         other_params = []
         for name, param in model.named_parameters():
             if param.requires_grad:
-                if ".thinker." in name and "lora_" in name:
-                    thinker_params.append(name)
-                elif ".talker." in name and "lora_" in name:
-                    talker_params.append(name)
+                if "lora_" in name:
+                    lora_params.append(name)
                 else:
                     other_params.append(name)
 
         entries_to_show = 20
-        logger.debug(config, f"Thinker LoRA parameters: {len(thinker_params)}")
-        for name in thinker_params[:entries_to_show]:
+        logger.debug(config, f"LoRA parameters: {len(lora_params)}")
+        for name in lora_params[:entries_to_show]:
             logger.debug(config, f"  {name}")
-        if len(thinker_params) > entries_to_show:
-            logger.debug(config, f"  ... and {len(thinker_params) - entries_to_show} more")
+        if len(lora_params) > entries_to_show:
+            logger.debug(config, f"  ... and {len(lora_params) - entries_to_show} more")
             
-        logger.debug(config, f"Talker LoRA parameters: {len(talker_params)}")
-        for name in talker_params[:entries_to_show]:
-            logger.debug(config, f"  {name}")
-        if len(talker_params) > entries_to_show:
-            logger.debug(config, f"  ... and {len(talker_params) - entries_to_show} more")
-            
-        logger.debug(config, f"Other trainable parameters: {len(other_params)}")
+        logger.debug(config, f"Other trainable parameters (modules_to_save): {len(other_params)}")
         for name in other_params[:entries_to_show]:
             logger.debug(config, f"  {name}")
         if len(other_params) > entries_to_show:
