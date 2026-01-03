@@ -167,7 +167,7 @@ def main():
 
     # Load FSDP checkpoint
     print("\n[2/4] Loading FSDP checkpoint...")
-    state_dict = load_fsdp_checkpoint(checkpoint_path)
+    state_dict = load_fsdp_checkpoint(checkpoint_path)['model']
     print(f"  Loaded {len(state_dict)} keys")
 
     # Extract trained weights
