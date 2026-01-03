@@ -1,13 +1,4 @@
-#!/usr/bin/env python3
-"""
-Consolidate FSDP sharded checkpoint into a single PEFT-compatible checkpoint.
-
-Usage:
-    python scripts/merge_final_ckpt.py \
-        --checkpoint-dir ./SCA_finetune \
-        --output-dir ./SCA_finetune/final_consolidated
-"""
-
+#!/usr/bin/env -S uv run
 import argparse
 import json
 import sys
@@ -127,12 +118,17 @@ def main():
     parser = argparse.ArgumentParser(
         description="Consolidate FSDP checkpoint to PEFT format"
     )
-    parser.add_argument("--checkpoint-dir", type=str, required=True)
-    parser.add_argument("--output-dir", type=str, required=True)
+    parser.add_argument("--checkpoint-dir", type=str, default="./SCA_finetune")
+    parser.add_argument("--output-dir", type=str, default="./SCA_finetune/final_consolidated")
     parser.add_argument(
         "--base-model-id",
         type=str,
         default="huihui-ai/Huihui-Qwen3-Omni-30B-A3B-Instruct-abliterated",
+    )
+    parser.add_argument(
+        "--cache-dir",
+        type=str,
+        default=(Path(__file__).parent / ".." / ".hf_cache").resolve().as_posix(),
     )
     args = parser.parse_args()
 
