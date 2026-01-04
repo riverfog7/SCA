@@ -1,5 +1,5 @@
 import re
-from typing import List
+from typing import List, Optional, Any, Tuple
 
 import numpy as np
 import torch
@@ -781,3 +781,323 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
             hidden_states=thinker_outputs.hidden_states,
             attentions=thinker_outputs.attentions,
         )
+
+    @torch.no_grad()
+    def generate(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        speaker_embedding: Optional[torch.Tensor] = None,
+        speaker: str = "Ethan",
+        use_audio_in_video: bool = False,
+        return_audio: Optional[bool] = None,
+        thinker_max_new_tokens: int = 1024,
+        thinker_eos_token_id: int = 151645,
+        talker_max_new_tokens: int = 4096,
+        talker_do_sample: bool = True,
+        talker_top_k: int = 50,
+        talker_top_p: float = 1.0,
+        talker_temperature: float = 0.9,
+        talker_repetition_penalty: float = 1.05,
+        **kwargs,
+    ) -> Tuple[Any, Optional[torch.Tensor]]:
+        """
+        Generate text and optionally audio from multimodal input.
+        
+        This method supports voice cloning via speaker embeddings. When speaker_embedding
+        is provided, it uses the continuous embedding for voice synthesis. Otherwise,
+        it falls back to using discrete speaker IDs (like the original model).
+        
+        Args:
+            input_ids: Input token IDs with multimodal placeholders [1, seq_len]
+            speaker_embedding: Optional speaker embedding [1, 192] from ECAPA-TDNN for voice cloning.
+                              If None, falls back to discrete speaker ID from `speaker` parameter.
+            speaker: Speaker name for fallback when speaker_embedding is None. Default: "Ethan"
+            use_audio_in_video: If True, use audio track from video inputs
+            return_audio: If True, generate audio output. If None, auto-detect based on has_talker
+            thinker_max_new_tokens: Max tokens for thinker (text) generation
+            thinker_eos_token_id: EOS token ID for thinker
+            talker_max_new_tokens: Max tokens for talker (audio codec) generation
+            talker_do_sample: Whether to use sampling for talker
+            talker_top_k: Top-k sampling parameter for talker
+            talker_top_p: Top-p (nucleus) sampling parameter for talker
+            talker_temperature: Temperature for talker sampling
+            talker_repetition_penalty: Repetition penalty for talker
+            **kwargs: Additional arguments (input_features, attention_mask, etc.)
+            
+        Returns:
+            Tuple of (thinker_result, audio_waveform):
+                - thinker_result: Text generation output from thinker
+                - audio_waveform: Generated audio waveform tensor, or None if return_audio=False
+        """
+        # Validate talker availability
+        if return_audio and not self.has_talker:
+            raise ValueError(
+                "Cannot use talker when talker module not initialized. "
+                "Use `enable_talker` method or set enable_talker in config to enable talker."
+            )
+        if return_audio is None:
+            return_audio = self.has_talker
+
+        # Validate speaker_embedding shape if provided
+        if speaker_embedding is not None:
+            if speaker_embedding.ndim != 2 or speaker_embedding.shape[1] != 192:
+                raise ValueError(
+                    f"speaker_embedding must be [1, 192], got {speaker_embedding.shape}"
+                )
+            speaker_embedding = speaker_embedding.to(self.device)
+
+        # ========================================
+        # Parse kwargs into component-specific dicts
+        # ========================================
+        shared_kwargs = {"use_audio_in_video": use_audio_in_video}
+        thinker_kwargs = {
+            "max_new_tokens": thinker_max_new_tokens,
+            "eos_token_id": thinker_eos_token_id,
+        }
+
+        talker_kwargs = {}
+        token2wav_kwargs = {}
+        
+        if return_audio:
+            # Validate batch size (original limitation)
+            if input_ids is not None and input_ids.shape[0] != 1:
+                raise NotImplementedError(
+                    "Qwen3-Omni currently does not support batched inference with audio output"
+                )
+            
+            # Build suppressed tokens list (special tokens that shouldn't be predicted)
+            talker_suppressed_tokens = [
+                i
+                for i in range(
+                    self.config.talker_config.text_config.vocab_size - 1024,
+                    self.config.talker_config.text_config.vocab_size,
+                )
+                if i != self.config.talker_config.codec_eos_token_id
+            ]
+            
+            talker_kwargs = {
+                "max_new_tokens": talker_max_new_tokens,
+                "do_sample": talker_do_sample,
+                "top_k": talker_top_k,
+                "top_p": talker_top_p,
+                "temperature": talker_temperature,
+                "eos_token_id": self.config.talker_config.codec_eos_token_id,
+                "repetition_penalty": talker_repetition_penalty,
+                "suppress_tokens": talker_suppressed_tokens,
+                "output_hidden_states": True,
+                "return_dict_in_generate": True,
+            }
+
+        # Parse prefixed kwargs
+        for key, value in kwargs.items():
+            if key.startswith("thinker_"):
+                thinker_kwargs[key[len("thinker_"):]] = value
+            elif key.startswith("talker_"):
+                talker_kwargs[key[len("talker_"):]] = value
+            elif key.startswith("token2wav_"):
+                token2wav_kwargs[key[len("token2wav_"):]] = value
+            elif key == "feature_attention_mask":
+                thinker_kwargs[key] = value
+                talker_kwargs["audio_feature_lengths"] = torch.sum(value, dim=1)
+            elif key in ("input_features", "attention_mask"):
+                thinker_kwargs[key] = value
+            else:
+                shared_kwargs[key] = value
+
+        # Merge shared kwargs
+        for key, value in shared_kwargs.items():
+            if key not in thinker_kwargs:
+                thinker_kwargs[key] = value
+            if key not in talker_kwargs and key in [
+                "image_grid_thw", "video_grid_thw", "video_second_per_grid"
+            ]:
+                talker_kwargs[key] = value
+            if key not in token2wav_kwargs:
+                token2wav_kwargs[key] = value
+
+        # ========================================
+        # Step 1: Thinker Generation (Text)
+        # ========================================
+        generate_audio = return_audio and self.has_talker
+        if generate_audio:
+            thinker_kwargs["output_hidden_states"] = True
+            thinker_kwargs["return_dict_in_generate"] = True
+
+        thinker_result = self.thinker.generate(input_ids=input_ids, **thinker_kwargs)
+
+        if not generate_audio:
+            return thinker_result, None
+
+        # ========================================
+        # Step 2: Prepare Talker Input
+        # ========================================
+        # Extract hidden states from thinker generation
+        # thinker_result.hidden_states is a tuple of (per-token hidden states)
+        # Each element is a tuple of layer outputs, we need layer 0 and accept_hidden_layer
+        thinker_embed = torch.cat(
+            [hidden_states[0] for hidden_states in thinker_result.hidden_states], 
+            dim=1
+        ).to(self.talker.device)  # [1, total_seq, hidden]
+        
+        accept_layer = self.config.talker_config.accept_hidden_layer
+        thinker_hidden = torch.cat(
+            [hidden_states[accept_layer] for hidden_states in thinker_result.hidden_states],
+            dim=1,
+        ).to(self.talker.device)  # [1, total_seq, hidden]
+
+        # Find im_start positions in the full sequence (input + generated)
+        im_start_indexes = torch.cat(
+            (
+                torch.nonzero(input_ids[0] == self.config.im_start_token_id).squeeze(),
+                torch.tensor(
+                    [thinker_result.sequences.shape[-1]], 
+                    device=input_ids.device, 
+                    dtype=input_ids.dtype
+                ),
+            ),
+            dim=-1,
+        ).to(self.talker.device)
+
+        # Build multimodal mask for the full sequence
+        multimodal_mask = (
+            (thinker_result.sequences == self.config.thinker_config.audio_token_id)
+            | (thinker_result.sequences == self.config.thinker_config.image_token_id)
+            | (thinker_result.sequences == self.config.thinker_config.video_token_id)
+        ).to(self.talker.device)
+
+        # Get TTS special token embeddings
+        talker_special_tokens = torch.tensor(
+            [[self.config.tts_bos_token_id, self.config.tts_eos_token_id, self.config.tts_pad_token_id]],
+            device=self.thinker.device,
+            dtype=input_ids.dtype,
+        )
+        
+        # Handle LoRA-wrapped thinker embeddings
+        thinker_embeddings = self.thinker.get_input_embeddings()
+        if hasattr(thinker_embeddings, 'base_layer'):
+            thinker_embeddings = thinker_embeddings.base_layer
+        
+        tts_bos_embed, tts_eos_embed, tts_pad_embed = (
+            self.talker.text_projection(thinker_embeddings(talker_special_tokens))
+            .to(self.talker.device)
+            .chunk(3, dim=1)
+        )
+
+        # ========================================
+        # Step 3: Build Talker Prefix
+        # ========================================
+        talker_input_embeds = []
+        talker_input_ids = []
+        trailing_text_hidden = None
+
+        for i in range(len(im_start_indexes) - 1):
+            im_start_index = im_start_indexes[i]
+            segment_end_index = im_start_indexes[i + 1]
+            role_token = input_ids[0][im_start_index + 1]
+
+            # Skip system prompts
+            if role_token == self.config.system_token_id:
+                continue
+            
+            # User turn: use text projection + hidden projection for multimodal
+            elif role_token == self.config.user_token_id:
+                talker_user_part = self._get_talker_user_parts(
+                    im_start_index,
+                    segment_end_index,
+                    multimodal_mask,
+                    thinker_hidden,
+                    thinker_embed,
+                )
+                talker_input_embeds.append(talker_user_part)
+                talker_input_ids.append(
+                    thinker_result.sequences[:, im_start_index:segment_end_index]
+                )
+            
+            # Current assistant turn (last one): build with speaker embedding
+            elif role_token == self.config.assistant_token_id and i == len(im_start_indexes) - 2:
+                if speaker_embedding is not None:
+                    # Use speaker embedding for voice cloning
+                    assistant_embeds, assistant_ids, trailing_text_hidden = self._get_talker_assistant_parts(
+                        im_start_index,
+                        segment_end_index,
+                        speaker_embedding,
+                        thinker_embed,
+                        tts_pad_embed,
+                        tts_bos_embed,
+                        tts_eos_embed,
+                    )
+                else:
+                    # Fallback to discrete speaker ID (original behavior)
+                    speaker_id = self.config.talker_config.speaker_id.get(speaker.lower())
+                    if speaker_id is None:
+                        raise NotImplementedError(f"Speaker {speaker} not implemented")
+                    
+                    # Call parent's _get_talker_assistant_parts with speaker_id
+                    assistant_embeds, assistant_ids, trailing_text_hidden = (
+                        Qwen3OmniMoeForConditionalGeneration._get_talker_assistant_parts(
+                            self,
+                            im_start_index,
+                            segment_end_index,
+                            speaker_id,
+                            thinker_embed,
+                            tts_pad_embed,
+                            tts_bos_embed,
+                            tts_eos_embed,
+                        )
+                    )
+                
+                talker_input_embeds.append(assistant_embeds)
+                talker_input_ids.append(assistant_ids)
+            
+            # Historical assistant turns: skip (same as original)
+            elif role_token == self.config.assistant_token_id and i != len(im_start_indexes) - 2:
+                continue
+            
+            else:
+                raise AssertionError("Expect role id after <|im_start|> (assistant, user, system)")
+
+        if trailing_text_hidden is None:
+            raise RuntimeError("Failed to build trailing_text_hidden for talker generation.")
+
+        talker_input_embed = torch.cat(
+            [embed.to(self.talker.device) for embed in talker_input_embeds], 
+            dim=1
+        )
+        talker_input_id = torch.cat(
+            [ids.to(self.talker.device) for ids in talker_input_ids], 
+            dim=1
+        )
+
+        # ========================================
+        # Step 4: Talker Generation (Codec Tokens)
+        # ========================================
+        talker_result = self.talker.generate(
+            inputs_embeds=talker_input_embed,
+            trailing_text_hidden=trailing_text_hidden,
+            tts_pad_embed=tts_pad_embed,
+            talker_input_ids=talker_input_id,
+            **talker_kwargs,
+        )
+
+        # ========================================
+        # Step 5: Convert Codec Tokens to Waveform
+        # ========================================
+        # Extract codec tokens from talker hidden states
+        # talker_result.hidden_states is (hidden_states_tuple, residual_codes) per token
+        talker_codes = (
+            torch.stack(
+                [hid[-1] for hid in talker_result.hidden_states if hid[-1] is not None], 
+                dim=1
+            )
+            .transpose(1, 2)
+            .to(self.code2wav.device)
+        )
+        
+        # Decode to waveform using code2wav
+        talker_wavs = self.code2wav.chunked_decode(
+            talker_codes, 
+            chunk_size=300, 
+            left_context_size=25
+        )
+
+        return thinker_result, talker_wavs.float()
