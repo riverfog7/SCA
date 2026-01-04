@@ -24,10 +24,6 @@ class Qwen3OmniMoeWithProperForwardConfig(Qwen3OmniMoeConfig):
 
 class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
     config_class = Qwen3OmniMoeWithProperForwardConfig
-    
-    # Modules that are loaded separately and should not be re-initialized
-    # when their keys are "missing" from the main checkpoint
-    _modules_to_skip_initialization = ["mimi_model", "mimi_feature_extractor"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -41,10 +37,10 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
         for param in self.mimi_model.parameters():
             param.requires_grad = False
 
-        # CRITICAL: Mark mimi_model as already initialized to prevent
-        # from_pretrained() from reinitializing it with garbage weights.
-        # This must happen immediately after loading the pretrained weights.
-        self._mark_module_initialized(self.mimi_model)
+        # CRITICAL FIX: Prevent mimi_model from being reinitialized by making its
+        # _init_weights method a no-op. When from_pretrained() calls initialize_weights(),
+        # it will recursively call mimi_model._init_weights() which now does nothing.
+        self.mimi_model._init_weights = lambda module: None
 
         # Projection layer: speaker embedding (192 dim from ECAPA-TDNN) -> talker hidden size
         # Speaker embeddings are pre-computed in the dataset, not extracted here
@@ -52,46 +48,6 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
         speaker_embed_dim = 192  # ECAPA-TDNN output dimension
         talker_hidden_size = self.config.talker_config.text_config.hidden_size
         self.speaker_projection = nn.Linear(speaker_embed_dim, talker_hidden_size)
-
-    def _mark_module_initialized(self, module: nn.Module) -> None:
-        """Mark a module and all its children as already initialized.
-        
-        This prevents HuggingFace's weight initialization from overwriting
-        pretrained weights that were loaded separately (not from the main checkpoint).
-        
-        Args:
-            module: The module to mark as initialized (will recurse through all children)
-        """
-        module._is_hf_initialized = True
-        for child in module.modules():
-            child._is_hf_initialized = True
-        for param in module.parameters():
-            param._is_hf_initialized = True
-        for buffer in module.buffers():
-            buffer._is_hf_initialized = True
-
-    def _initialize_missing_keys(self, missing_keys: List[str], is_quantized: bool) -> None:
-        """Override to skip re-initialization of externally loaded modules.
-        
-        The mimi_model is loaded from its own pretrained weights (kyutai/mimi),
-        not from the Qwen checkpoint. When from_pretrained() loads the Qwen weights,
-        it sees mimi_model keys as "missing" and would re-initialize them randomly.
-        This override filters out those keys to preserve the correctly loaded weights.
-        """
-        filtered_missing_keys = [
-            k for k in missing_keys 
-            if not any(skip_module in k for skip_module in self._modules_to_skip_initialization)
-        ]
-        
-        # Log how many keys we're skipping (useful for debugging)
-        skipped_count = len(missing_keys) - len(filtered_missing_keys)
-        if skipped_count > 0:
-            print(
-                f"Skipping initialization of {skipped_count} keys from externally loaded modules ",
-                f"({', '.join(self._modules_to_skip_initialization)})"
-            )
-        
-        super()._initialize_missing_keys(filtered_missing_keys, is_quantized)
 
     def _get_unwrapped_code_predictor(self):
         """Get the code_predictor unwrapped from PEFT's ModulesToSaveWrapper if present.
