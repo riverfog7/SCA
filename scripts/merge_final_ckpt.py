@@ -50,9 +50,9 @@ def extract_trained_weights(
 ) -> Dict[str, torch.Tensor]:
     """Extract LoRA adapters and modules_to_save from state dict.
     
-    PEFT expects different key formats:
-    - LoRA weights: WITHOUT 'base_model.model.' prefix
-    - modules_to_save: WITH 'base_model.model.' prefix
+    PEFT expects specific key formats:
+    - LoRA weights: base_model.model.<path>.lora_A.default.weight
+    - modules_to_save: base_model.model.<path>
     """
     trained_weights = {}
 
@@ -61,7 +61,7 @@ def extract_trained_weights(
         if not isinstance(tensor, torch.Tensor):
             continue
 
-        # Strip FSDP wrapper prefix first
+        # Strip FSDP wrapper prefix only
         clean_key = key
         if clean_key.startswith("_fsdp_wrapped_module."):
             clean_key = clean_key[len("_fsdp_wrapped_module."):]
@@ -70,16 +70,17 @@ def extract_trained_weights(
         is_lora = "lora_" in clean_key
         is_module_to_save = any(m in clean_key for m in modules_to_save)
 
-        if is_lora:
-            # LoRA weights: strip 'base_model.model.' prefix
-            if clean_key.startswith("base_model.model."):
-                clean_key = clean_key[len("base_model.model."):]
-            trained_weights[clean_key] = tensor.to(torch.bfloat16).cpu()
-        elif is_module_to_save:
-            # modules_to_save: KEEP 'base_model.model.' prefix (PEFT expects it)
-            # Ensure prefix exists
+        if is_lora or is_module_to_save:
+            # Ensure 'base_model.model.' prefix exists
             if not clean_key.startswith("base_model.model."):
                 clean_key = "base_model.model." + clean_key
+            
+            # For LoRA weights, add '.default' adapter name before .weight
+            if is_lora:
+                # Change: lora_A.weight -> lora_A.default.weight
+                clean_key = clean_key.replace(".lora_A.weight", ".lora_A.default.weight")
+                clean_key = clean_key.replace(".lora_B.weight", ".lora_B.default.weight")
+            
             trained_weights[clean_key] = tensor.to(torch.bfloat16).cpu()
 
     return trained_weights
