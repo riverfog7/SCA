@@ -945,16 +945,10 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
             dim=1,
         ).to(self.talker.device)  # [1, total_seq, hidden]
 
-        # Find im_start positions in the input sequence
-        # Note: squeeze(-1) to handle both single and multiple matches correctly
-        im_start_positions = torch.nonzero(input_ids[0] == self.config.im_start_token_id).squeeze(-1)
-        # Ensure it's 1D even if there's only one match
-        if im_start_positions.dim() == 0:
-            im_start_positions = im_start_positions.unsqueeze(0)
-        
+        # Find im_start positions in the full sequence (input + generated)
         im_start_indexes = torch.cat(
             (
-                im_start_positions,
+                torch.nonzero(input_ids[0] == self.config.im_start_token_id).squeeze(),
                 torch.tensor(
                     [thinker_result.sequences.shape[-1]], 
                     device=input_ids.device, 
@@ -964,19 +958,12 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
             dim=-1,
         ).to(self.talker.device)
 
-        # Build multimodal mask - must match thinker_embed length, not sequences length
-        # The hidden states may have different length than sequences in some edge cases
-        # Use thinker_embed length for the mask to ensure consistency
-        embed_seq_len = thinker_embed.shape[1]
-        sequences_for_mask = thinker_result.sequences[:, :embed_seq_len]
+        # Build multimodal mask for the full sequence
         multimodal_mask = (
-            (sequences_for_mask == self.config.thinker_config.audio_token_id)
-            | (sequences_for_mask == self.config.thinker_config.image_token_id)
-            | (sequences_for_mask == self.config.thinker_config.video_token_id)
+            (thinker_result.sequences == self.config.thinker_config.audio_token_id)
+            | (thinker_result.sequences == self.config.thinker_config.image_token_id)
+            | (thinker_result.sequences == self.config.thinker_config.video_token_id)
         ).to(self.talker.device)
-        
-        # Adjust im_start_indexes to not exceed embed length
-        im_start_indexes = torch.clamp(im_start_indexes, max=embed_seq_len)
 
         # Get TTS special token embeddings
         talker_special_tokens = torch.tensor(
@@ -1006,15 +993,6 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
         for i in range(len(im_start_indexes) - 1):
             im_start_index = im_start_indexes[i]
             segment_end_index = im_start_indexes[i + 1]
-            
-            # Ensure indices don't exceed embed length
-            im_start_index_clamped = min(int(im_start_index), embed_seq_len)
-            segment_end_index_clamped = min(int(segment_end_index), embed_seq_len)
-            
-            # Skip empty segments
-            if im_start_index_clamped >= segment_end_index_clamped:
-                continue
-                
             role_token = input_ids[0][im_start_index + 1]
 
             # Skip system prompts
@@ -1024,15 +1002,15 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
             # User turn: use text projection + hidden projection for multimodal
             elif role_token == self.config.user_token_id:
                 talker_user_part = self._get_talker_user_parts(
-                    im_start_index_clamped,
-                    segment_end_index_clamped,
+                    im_start_index,
+                    segment_end_index,
                     multimodal_mask,
                     thinker_hidden,
                     thinker_embed,
                 )
                 talker_input_embeds.append(talker_user_part)
                 talker_input_ids.append(
-                    sequences_for_mask[:, im_start_index_clamped:segment_end_index_clamped]
+                    thinker_result.sequences[:, im_start_index:segment_end_index]
                 )
             
             # Current assistant turn (last one): build with speaker embedding
@@ -1040,8 +1018,8 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
                 if speaker_embedding is not None:
                     # Use speaker embedding for voice cloning
                     assistant_embeds, assistant_ids, trailing_text_hidden = self._get_talker_assistant_parts(
-                        im_start_index_clamped,
-                        segment_end_index_clamped,
+                        im_start_index,
+                        segment_end_index,
                         speaker_embedding,
                         thinker_embed,
                         tts_pad_embed,
@@ -1058,8 +1036,8 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
                     assistant_embeds, assistant_ids, trailing_text_hidden = (
                         Qwen3OmniMoeForConditionalGeneration._get_talker_assistant_parts(
                             self,
-                            im_start_index_clamped,
-                            segment_end_index_clamped,
+                            im_start_index,
+                            segment_end_index,
                             speaker_id,
                             thinker_embed,
                             tts_pad_embed,
