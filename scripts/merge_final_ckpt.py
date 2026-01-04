@@ -45,9 +45,15 @@ def load_fsdp_checkpoint(checkpoint_path: Path) -> Dict[str, torch.Tensor]:
 
 
 def extract_trained_weights(
-    state_dict: Dict[str, torch.Tensor]
+    state_dict: Dict[str, torch.Tensor],
+    modules_to_save: list[str],
 ) -> Dict[str, torch.Tensor]:
-    """Extract LoRA adapters and modules_to_save from state dict."""
+    """Extract LoRA adapters and modules_to_save from state dict.
+    
+    PEFT expects different key formats:
+    - LoRA weights: WITHOUT 'base_model.model.' prefix
+    - modules_to_save: WITH 'base_model.model.' prefix
+    """
     trained_weights = {}
 
     for key, tensor in state_dict.items():
@@ -55,19 +61,25 @@ def extract_trained_weights(
         if not isinstance(tensor, torch.Tensor):
             continue
 
-        # Clean key (remove FSDP/PEFT wrapper prefixes)
+        # Strip FSDP wrapper prefix first
         clean_key = key
-        for prefix in ["_fsdp_wrapped_module.", "base_model.model."]:
-            if clean_key.startswith(prefix):
-                clean_key = clean_key[len(prefix):]
+        if clean_key.startswith("_fsdp_wrapped_module."):
+            clean_key = clean_key[len("_fsdp_wrapped_module."):]
 
-        # Check if this is a trained weight (LoRA or modules_to_save)
-        is_lora = "lora_" in key
-        is_module_to_save = any(
-            m in key for m in ["speaker_projection", "code_predictor"]
-        )
+        # Check if this is a trained weight
+        is_lora = "lora_" in clean_key
+        is_module_to_save = any(m in clean_key for m in modules_to_save)
 
-        if is_lora or is_module_to_save:
+        if is_lora:
+            # LoRA weights: strip 'base_model.model.' prefix
+            if clean_key.startswith("base_model.model."):
+                clean_key = clean_key[len("base_model.model."):]
+            trained_weights[clean_key] = tensor.to(torch.bfloat16).cpu()
+        elif is_module_to_save:
+            # modules_to_save: KEEP 'base_model.model.' prefix (PEFT expects it)
+            # Ensure prefix exists
+            if not clean_key.startswith("base_model.model."):
+                clean_key = "base_model.model." + clean_key
             trained_weights[clean_key] = tensor.to(torch.bfloat16).cpu()
 
     return trained_weights
@@ -175,12 +187,20 @@ def main():
 
     # Extract trained weights
     print("\n[4/5] Extracting trained weights...")
-    trained_weights = extract_trained_weights(state_dict)
+    trained_weights = extract_trained_weights(state_dict, lora_config.modules_to_save)
 
     lora_count = sum(1 for k in trained_weights if "lora_" in k)
     module_count = len(trained_weights) - lora_count
     print(f"  LoRA weights: {lora_count}")
-    print(f"  Module weights: {module_count}")
+    print(f"  Module weights (with 'base_model.model.' prefix): {module_count}")
+
+    # Show sample keys for verification
+    lora_sample = [k for k in trained_weights if "lora_" in k][:2]
+    module_sample = [k for k in trained_weights if "lora_" not in k][:2]
+    if lora_sample:
+        print(f"  Sample LoRA key: {lora_sample[0]}")
+    if module_sample:
+        print(f"  Sample module key: {module_sample[0]}")
 
     if not trained_weights:
         print("ERROR: No trained weights found!")
