@@ -7,6 +7,8 @@ from typing import Dict
 
 import torch
 from safetensors.torch import save_file
+from sca_train.config.loader import load_config
+from sca_train.config.lora import SCALoraConfig
 from torch.distributed.checkpoint.format_utils import dcp_to_torch_save
 
 
@@ -71,24 +73,20 @@ def extract_trained_weights(
     return trained_weights
 
 
-def create_adapter_config(base_model_id: str) -> dict:
-    """Create PEFT adapter configuration matching training config."""
-    # These values match configs/sca/default.yaml
+def create_adapter_config(lora_config: SCALoraConfig, base_model_id: str) -> dict:
+    """Create PEFT adapter configuration from SCALoraConfig."""
     return {
         "base_model_name_or_path": base_model_id,
         "peft_type": "LORA",
-        "task_type": "CAUSAL_LM",
+        "task_type": lora_config.task_type,
         "inference_mode": False,
-        # Thinker/Talker shared LoRA params (from default.yaml)
-        "r": 32,
-        "lora_alpha": 64,
-        "lora_dropout": 0.05,
-        "bias": "none",
-        "use_dora": False,
-        # Modules to save (trained in full precision)
-        "modules_to_save": ["speaker_projection", "talker.code_predictor"],
-        # Target modules - only attention projections matched in Qwen3-Omni
-        "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj"],
+        "r": lora_config.r,
+        "lora_alpha": lora_config.lora_alpha,
+        "lora_dropout": lora_config.lora_dropout,
+        "bias": lora_config.lora_bias,
+        "use_dora": lora_config.use_dora,
+        "modules_to_save": lora_config.modules_to_save,
+        "target_modules": lora_config.target_modules_regex,
     }
 
 
@@ -126,6 +124,12 @@ def main():
         default="huihui-ai/Huihui-Qwen3-Omni-30B-A3B-Instruct-abliterated",
     )
     parser.add_argument(
+        "--config-file",
+        type=str,
+        default=(Path(__file__).parent / ".." / "configs" / "sca" / "default.yaml").resolve().as_posix(),
+        help="Path to training config YAML file",
+    )
+    parser.add_argument(
         "--cache-dir",
         type=str,
         default=(Path(__file__).parent / ".." / ".hf_cache").resolve().as_posix(),
@@ -134,18 +138,31 @@ def main():
 
     checkpoint_dir = Path(args.checkpoint_dir)
     output_dir = Path(args.output_dir)
+    config_file = Path(args.config_file)
 
     print("=" * 60)
     print("FSDP Checkpoint Consolidation")
     print("=" * 60)
 
+    # Load training config
+    print("\n[1/5] Loading training config...")
+    if not config_file.exists():
+        print(f"  ERROR: Config file not found: {config_file}")
+        sys.exit(1)
+    training_config = load_config(config_file)
+    lora_config = training_config.lora_config
+    print(f"  Config loaded from: {config_file}")
+    print(f"  LoRA r={lora_config.r}, alpha={lora_config.lora_alpha}")
+    print(f"  Target modules regex: {lora_config.target_modules_regex}")
+    print(f"  Modules to save: {lora_config.modules_to_save}")
+
     # Find checkpoint
-    print("\n[1/4] Finding checkpoint...")
+    print("\n[2/5] Finding checkpoint...")
     checkpoint_path = find_latest_checkpoint(checkpoint_dir)
     print(f"  Using: {checkpoint_path.name}")
 
     # Load FSDP checkpoint
-    print("\n[2/4] Loading FSDP checkpoint...")
+    print("\n[3/5] Loading FSDP checkpoint...")
     loaded = load_fsdp_checkpoint(checkpoint_path)
     # Handle nested state dict (may have 'model' key from FSDP)
     if "model" in loaded:
@@ -157,7 +174,7 @@ def main():
     print(f"  Loaded {len(state_dict)} keys")
 
     # Extract trained weights
-    print("\n[3/4] Extracting trained weights...")
+    print("\n[4/5] Extracting trained weights...")
     trained_weights = extract_trained_weights(state_dict)
 
     lora_count = sum(1 for k in trained_weights if "lora_" in k)
@@ -170,8 +187,8 @@ def main():
         sys.exit(1)
 
     # Save checkpoint
-    print("\n[4/4] Saving checkpoint...")
-    config = create_adapter_config(args.base_model_id)
+    print("\n[5/5] Saving checkpoint...")
+    config = create_adapter_config(lora_config, args.base_model_id)
     save_checkpoint(output_dir, trained_weights, config)
 
     print("\n" + "=" * 60)
