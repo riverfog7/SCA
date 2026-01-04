@@ -3631,7 +3631,7 @@ requires-dist = [
     { name = "peft", specifier = ">=0.18.0" },
     { name = "qwen-omni-utils", specifier = ">=0.0.8" },
     { name = "sca-data", git = "https://github.com/riverfog7/sca_data_prep.git" },
-    { name = "speechbrain", specifier = ">=1.0.3" },
+    { name = "speechbrain", git = "https://github.com/speechbrain/speechbrain?rev=264b642" },
     { name = "torch", specifier = ">=2.9.1" },
     { name = "torch", marker = "extra == 'cpu'", specifier = "==2.9.1", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "sca-train", extra = "cpu" } },
     { name = "torch", marker = "extra == 'cu126'", specifier = "==2.9.1", index = "https://download.pytorch.org/whl/cu126", conflict = { package = "sca-train", extra = "cu126" } },
@@ -3903,7 +3903,7 @@ wheels = [
 [[package]]
 name = "speechbrain"
 version = "1.0.3"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/speechbrain/speechbrain?rev=264b642#264b642d7820547f02ae25cba028a4ae96f0e88f" }
 dependencies = [
     { name = "huggingface-hub" },
     { name = "hyperpyyaml" },
@@ -3912,6 +3912,7 @@ dependencies = [
     { name = "packaging" },
     { name = "scipy" },
     { name = "sentencepiece" },
+    { name = "soundfile" },
     { name = "torch", version = "2.9.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-9-sca-train-cpu') or (extra == 'extra-9-sca-train-cpu' and extra == 'extra-9-sca-train-cu126') or (extra == 'extra-9-sca-train-cpu' and extra == 'extra-9-sca-train-cu128') or (extra == 'extra-9-sca-train-cpu' and extra == 'extra-9-sca-train-cu130') or (extra == 'extra-9-sca-train-cu126' and extra == 'extra-9-sca-train-cu128') or (extra == 'extra-9-sca-train-cu126' and extra == 'extra-9-sca-train-cu130') or (extra == 'extra-9-sca-train-cu128' and extra == 'extra-9-sca-train-cu130')" },
     { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-9-sca-train-cpu' and extra == 'extra-9-sca-train-cu126') or (extra == 'extra-9-sca-train-cpu' and extra == 'extra-9-sca-train-cu128') or (extra == 'extra-9-sca-train-cpu' and extra == 'extra-9-sca-train-cu130') or (extra == 'extra-9-sca-train-cu126' and extra == 'extra-9-sca-train-cu128') or (extra == 'extra-9-sca-train-cu126' and extra == 'extra-9-sca-train-cu130') or (extra == 'extra-9-sca-train-cu128' and extra == 'extra-9-sca-train-cu130') or (extra != 'extra-9-sca-train-cpu' and extra != 'extra-9-sca-train-cu126' and extra != 'extra-9-sca-train-cu128' and extra != 'extra-9-sca-train-cu130')" },
     { name = "torch", version = "2.9.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-9-sca-train-cpu') or (extra == 'extra-9-sca-train-cpu' and extra == 'extra-9-sca-train-cu126') or (extra == 'extra-9-sca-train-cpu' and extra == 'extra-9-sca-train-cu128') or (extra == 'extra-9-sca-train-cpu' and extra == 'extra-9-sca-train-cu130') or (extra == 'extra-9-sca-train-cu126' and extra == 'extra-9-sca-train-cu128') or (extra == 'extra-9-sca-train-cu126' and extra == 'extra-9-sca-train-cu130') or (extra == 'extra-9-sca-train-cu128' and extra == 'extra-9-sca-train-cu130')" },
@@ -3928,10 +3929,6 @@ dependencies = [
     { name = "torchaudio", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-9-sca-train-cu128') or (sys_platform != 'linux' and extra == 'extra-9-sca-train-cu128') or (extra == 'extra-9-sca-train-cpu' and extra == 'extra-9-sca-train-cu126') or (extra == 'extra-9-sca-train-cpu' and extra == 'extra-9-sca-train-cu128') or (extra == 'extra-9-sca-train-cpu' and extra == 'extra-9-sca-train-cu130') or (extra == 'extra-9-sca-train-cu126' and extra == 'extra-9-sca-train-cu128') or (extra == 'extra-9-sca-train-cu126' and extra == 'extra-9-sca-train-cu130') or (extra == 'extra-9-sca-train-cu128' and extra == 'extra-9-sca-train-cu130')" },
     { name = "torchaudio", version = "2.9.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-9-sca-train-cu130') or (sys_platform != 'linux' and extra != 'extra-9-sca-train-cu128' and extra == 'extra-9-sca-train-cu130') or (sys_platform != 'linux' and extra != 'extra-9-sca-train-cpu' and extra != 'extra-9-sca-train-cu126' and extra == 'extra-9-sca-train-cu130') or (extra == 'extra-9-sca-train-cpu' and extra == 'extra-9-sca-train-cu126') or (extra == 'extra-9-sca-train-cpu' and extra == 'extra-9-sca-train-cu128') or (extra == 'extra-9-sca-train-cpu' and extra == 'extra-9-sca-train-cu130') or (extra == 'extra-9-sca-train-cu126' and extra == 'extra-9-sca-train-cu128') or (extra == 'extra-9-sca-train-cu126' and extra == 'extra-9-sca-train-cu130') or (extra == 'extra-9-sca-train-cu128' and extra == 'extra-9-sca-train-cu130')" },
     { name = "tqdm" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ab/10/87e666544a4e0cec7cbdc09f26948994831ae0f8bbc58de3bf53b68285ff/speechbrain-1.0.3.tar.gz", hash = "sha256:fcab3c6e90012cecb1eed40ea235733b550137e73da6bfa2340ba191ec714052", size = 747735 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/58/13/e61f1085aebee17d5fc2df19fcc5177c10379be52578afbecdd615a831c9/speechbrain-1.0.3-py3-none-any.whl", hash = "sha256:9859d4c1b1fb3af3b85523c0c89f52e45a04f305622ed55f31aa32dd2fba19e9", size = 864091 },
 ]
 
 [[package]]

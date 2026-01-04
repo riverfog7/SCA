@@ -75,6 +75,7 @@ torchvision = [
     { index = "pytorch-cu130", extra = "cu130" },
 ]
 sca-data = { git = "https://github.com/riverfog7/sca_data_prep.git" }
+speechbrain = { git = "https://github.com/speechbrain/speechbrain", rev = "264b642" }
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
