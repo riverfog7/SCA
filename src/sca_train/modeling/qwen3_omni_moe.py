@@ -41,12 +41,34 @@ class Qwen3OmniMoeWithProperForward(Qwen3OmniMoeForConditionalGeneration):
         for param in self.mimi_model.parameters():
             param.requires_grad = False
 
+        # CRITICAL: Mark mimi_model as already initialized to prevent
+        # from_pretrained() from reinitializing it with garbage weights.
+        # This must happen immediately after loading the pretrained weights.
+        self._mark_module_initialized(self.mimi_model)
+
         # Projection layer: speaker embedding (192 dim from ECAPA-TDNN) -> talker hidden size
         # Speaker embeddings are pre-computed in the dataset, not extracted here
         # This layer is kept in fp16/bf16 (not quantized) via llm_int8_skip_modules in train.py
         speaker_embed_dim = 192  # ECAPA-TDNN output dimension
         talker_hidden_size = self.config.talker_config.text_config.hidden_size
         self.speaker_projection = nn.Linear(speaker_embed_dim, talker_hidden_size)
+
+    def _mark_module_initialized(self, module: nn.Module) -> None:
+        """Mark a module and all its children as already initialized.
+        
+        This prevents HuggingFace's weight initialization from overwriting
+        pretrained weights that were loaded separately (not from the main checkpoint).
+        
+        Args:
+            module: The module to mark as initialized (will recurse through all children)
+        """
+        module._is_hf_initialized = True
+        for child in module.modules():
+            child._is_hf_initialized = True
+        for param in module.parameters():
+            param._is_hf_initialized = True
+        for buffer in module.buffers():
+            buffer._is_hf_initialized = True
 
     def _initialize_missing_keys(self, missing_keys: List[str], is_quantized: bool) -> None:
         """Override to skip re-initialization of externally loaded modules.
