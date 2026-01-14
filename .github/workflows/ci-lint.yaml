@@ -31,14 +31,6 @@ jobs:
         run: |
           uv sync --dev --locked --extra cpu
 
-      - name: Save venv cache
-        if: ${{ steps.venv-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          key: cache-key-${{ hashFiles('pyproject.toml', 'uv.lock') }}
-          path: |
-            ./.venv
-
       - name: lint
         run: |
           uv run ruff check --exit-non-zero-on-fix --no-cache --output-format github src/ scripts/ tests/
